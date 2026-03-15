@@ -122,20 +122,11 @@ export function createBanditClient(options?: ClientOptions): () => void {
 
   window.addEventListener('scroll', onScroll, { passive: true })
 
-  // Report reward on navigation (beforeunload)
-  function onBeforeUnload() {
-    // The SW handles reward attribution by matching the navigated URL to predictions
-    // No explicit reward message needed — the SW's handleFetch does this
-  }
-
-  window.addEventListener('beforeunload', onBeforeUnload)
-
   // Cleanup
   return () => {
     navigator.serviceWorker.removeEventListener('message', onMessage)
     window.removeEventListener('load', onLoad)
     window.removeEventListener('scroll', onScroll)
-    window.removeEventListener('beforeunload', onBeforeUnload)
     if (scrollTimer) clearTimeout(scrollTimer)
     if (useSpecRules) {
       removeSpeculationRules()

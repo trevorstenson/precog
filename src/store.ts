@@ -4,13 +4,24 @@ const DB_NAME = 'precog'
 const STORE_NAME = 'state'
 const STATE_KEY = 'bandit'
 
+let cachedDB: IDBDatabase | null = null
+
 function openDB(): Promise<IDBDatabase> {
+  if (cachedDB) return Promise.resolve(cachedDB)
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, 1)
     req.onupgradeneeded = () => {
       req.result.createObjectStore(STORE_NAME)
     }
-    req.onsuccess = () => resolve(req.result)
+    req.onsuccess = () => {
+      cachedDB = req.result
+      cachedDB.onclose = () => { cachedDB = null }
+      cachedDB.onversionchange = () => {
+        cachedDB?.close()
+        cachedDB = null
+      }
+      resolve(cachedDB)
+    }
     req.onerror = () => reject(req.error)
   })
 }
@@ -32,18 +43,15 @@ function tx<T>(
 export async function saveState(state: BanditState): Promise<void> {
   const db = await openDB()
   await tx(db, 'readwrite', (s) => s.put(state, STATE_KEY))
-  db.close()
 }
 
 export async function loadState(): Promise<BanditState | null> {
   const db = await openDB()
   const result = await tx<BanditState | undefined>(db, 'readonly', (s) => s.get(STATE_KEY))
-  db.close()
   return result ?? null
 }
 
 export async function clearState(): Promise<void> {
   const db = await openDB()
   await tx(db, 'readwrite', (s) => s.delete(STATE_KEY))
-  db.close()
 }

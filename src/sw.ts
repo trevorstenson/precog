@@ -18,7 +18,6 @@ export function createBanditSW(userConfig?: Partial<BanditConfig>) {
   const { dimensions: d, alpha, discount, topK, pruneAfter } = config
 
   let state: BanditState | null = null
-  let stateLoaded = false
   let lastPredictions: Prediction[] = []
   const meta: ContextMetadata = {
     sessionDepth: 0,
@@ -41,7 +40,6 @@ export function createBanditSW(userConfig?: Partial<BanditConfig>) {
       for (const url of Object.keys(state.arms)) {
         meta.visitedUrls!.add(url)
       }
-      stateLoaded = true
     }
     return state
   }
@@ -145,10 +143,12 @@ export function createBanditSW(userConfig?: Partial<BanditConfig>) {
             break
           }
           case 'precog:reward': {
+            const value = msg.value
+            if (!Number.isFinite(value) || value < 0 || value > 1) break
             const arm = s.arms[msg.url]
             if (arm) {
               const ctx = buildContext(msg.url, meta)
-              update(arm, ctx, msg.value, discount)
+              update(arm, ctx, value, discount)
               await saveState(s)
             }
             break
