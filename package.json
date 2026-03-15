@@ -1,6 +1,6 @@
 {
   "name": "navbandit",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Contextual bandit prefetching — learns which pages to prefetch per-user in real-time via LinUCB + Speculation Rules API",
   "type": "module",
   "repository": {
