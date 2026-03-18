@@ -1,5 +1,7 @@
 import { createArm, selectTopK } from '../../src/ucb1.js'
 import type { Arm } from '../../src/ucb1.js'
+import { createBetaArm, selectTopK as tsSelectTopK } from '../../src/thompson.js'
+import type { BetaArm } from '../../src/thompson.js'
 import { RNG } from './rng.js'
 import type { Strategy, StrategyId, TrafficMatrix } from './types.js'
 
@@ -67,6 +69,76 @@ export class NavBanditStrategy implements Strategy {
     for (const prefetched of this.lastPrefetched) {
       if (prefetched !== destination && state.arms[prefetched]) {
         state.arms[prefetched].pulls++
+        state.totalPulls++
+      }
+    }
+  }
+
+  reset(): void {
+    this.pageState = {}
+    this.lastPage = null
+    this.lastPrefetched = []
+    this.navCount = 0
+  }
+}
+
+// NavBandit Thompson Sampling strategy — Bayesian adaptive prefetching
+export class NavBanditTSStrategy implements Strategy {
+  id: StrategyId = 'navbandit-ts'
+  private pageState: Record<string, { arms: Record<string, BetaArm>; totalPulls: number }> = {}
+  private lastPage: string | null = null
+  private lastPrefetched: string[] = []
+  private navCount = 0
+
+  constructor(private k: number) {}
+
+  onNavigate(currentPage: string, availableLinks: string[]): string[] {
+    this.navCount++
+
+    if (!this.pageState[currentPage]) {
+      this.pageState[currentPage] = { arms: {}, totalPulls: 0 }
+    }
+    const state = this.pageState[currentPage]
+
+    // Add new arms with weak uniform prior
+    const linkCount = availableLinks.length
+    for (const link of availableLinks) {
+      if (!state.arms[link]) {
+        const arm = createBetaArm(this.navCount)
+        arm.alpha = 1 + 1 / linkCount
+        state.arms[link] = arm
+      }
+    }
+
+    // Only consider currently available links
+    const availableArms: Record<string, BetaArm> = {}
+    for (const link of availableLinks) {
+      availableArms[link] = state.arms[link]
+    }
+
+    const selected = tsSelectTopK(availableArms, this.k)
+
+    this.lastPage = currentPage
+    this.lastPrefetched = selected
+    return selected
+  }
+
+  onReveal(destination: string): void {
+    if (!this.lastPage || !this.pageState[this.lastPage]) return
+
+    const state = this.pageState[this.lastPage]
+
+    // Reward the actual destination (success: alpha++)
+    const destArm = state.arms[destination]
+    if (destArm) {
+      destArm.alpha++
+      state.totalPulls++
+    }
+
+    // Penalize prefetched arms that weren't clicked (failure: beta++)
+    for (const prefetched of this.lastPrefetched) {
+      if (prefetched !== destination && state.arms[prefetched]) {
+        state.arms[prefetched].beta++
         state.totalPulls++
       }
     }

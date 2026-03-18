@@ -9,6 +9,7 @@ import type {
 } from './types.js'
 import {
   NavBanditStrategy,
+  NavBanditTSStrategy,
   PrefetchAllStrategy,
   StaticTopKStrategy,
   RandomKStrategy,
@@ -27,6 +28,7 @@ export function createStrategies(
 ): Strategy[] {
   return [
     new NavBanditStrategy(k, alpha),
+    new NavBanditTSStrategy(k),
     new PrefetchAllStrategy(),
     new StaticTopKStrategy(matrix, k),
     new RandomKStrategy(k, rng),
@@ -63,7 +65,6 @@ export function runTrial(config: RunnerConfig, rng: RNG): TrialResult[] {
 
   // Find oracle's sliding window hit rates for convergence calculation
   const oracleIdx = strategies.findIndex(s => s.id === 'static-top-k')
-  const banditIdx = strategies.findIndex(s => s.id === 'navbandit')
 
   for (let step = 0; step < navigations.length; step++) {
     const nav = navigations[step]
@@ -114,10 +115,10 @@ export function runTrial(config: RunnerConfig, rng: RNG): TrialResult[] {
     }
   }
 
-  // Compute convergence for NavBandit
-  let convergenceNav: number | null = null
-  if (banditIdx >= 0 && oracleIdx >= 0) {
-    const banditRates = tracking[banditIdx].hitRateOverTime
+  // Compute convergence for bandit strategies
+  function computeConvergence(banditSi: number): number | null {
+    if (oracleIdx < 0) return null
+    const banditRates = tracking[banditSi].hitRateOverTime
     const oracleRates = tracking[oracleIdx].hitRateOverTime
     const sustainedSteps = 10
 
@@ -132,12 +133,12 @@ export function runTrial(config: RunnerConfig, rng: RNG): TrialResult[] {
           break
         }
       }
-      if (sustained) {
-        convergenceNav = i
-        break
-      }
+      if (sustained) return i
     }
+    return null
   }
+
+  const banditStrategies = new Set(['navbandit', 'navbandit-ts'])
 
   return strategies.map((strategy, si) => {
     const track = tracking[si]
@@ -154,7 +155,7 @@ export function runTrial(config: RunnerConfig, rng: RNG): TrialResult[] {
       hits: track.hits,
       wastedPrefetches: track.totalPrefetches - track.hits,
       bandwidthKB: track.totalPrefetches * pageSizeKB,
-      convergenceNav: strategy.id === 'navbandit' ? convergenceNav : null,
+      convergenceNav: banditStrategies.has(strategy.id) ? computeConvergence(si) : null,
       hitRateOverTime: track.hitRateOverTime,
     }
 

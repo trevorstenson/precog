@@ -12,6 +12,7 @@ import type {
 
 const ALL_STRATEGIES: StrategyId[] = [
   'navbandit',
+  'navbandit-ts',
   'prefetch-all',
   'static-top-k',
   'random-k',
@@ -142,7 +143,7 @@ export function formatResultsTable(result: BenchmarkResult): string {
 
   const hasLatency = result.strategies['navbandit'].mean.expectedLatencyMs !== undefined
 
-  let header = `${pad('Strategy', 16)}${pad('Hit Rate', 20)}${pad('Efficiency', 20)}${pad('Bandwidth (MB)', 18)}`
+  let header = `${pad('Strategy', 18)}${pad('Hit Rate', 20)}${pad('Efficiency', 20)}${pad('Bandwidth (MB)', 18)}`
   if (hasLatency) {
     header += `${pad('Avg Latency', 18)}${pad('Instant Nav %', 18)}`
   }
@@ -150,9 +151,10 @@ export function formatResultsTable(result: BenchmarkResult): string {
   lines.push(header)
   lines.push('-'.repeat(header.length))
 
-  const order: StrategyId[] = ['navbandit', 'prefetch-all', 'static-top-k', 'random-k', 'no-prefetch']
+  const order: StrategyId[] = ['navbandit', 'navbandit-ts', 'prefetch-all', 'static-top-k', 'random-k', 'no-prefetch']
   const names: Record<StrategyId, string> = {
-    'navbandit': 'NavBandit',
+    'navbandit': 'NavBandit UCB1',
+    'navbandit-ts': 'NavBandit TS',
     'prefetch-all': 'Prefetch All',
     'static-top-k': 'Static Top-K',
     'random-k': 'Random K',
@@ -165,14 +167,14 @@ export function formatResultsTable(result: BenchmarkResult): string {
     const effStr = sid === 'no-prefetch' ? 'n/a' : pct(s.mean.efficiency, s.ci95.efficiency)
     const bwStr = mb(s.mean.bandwidthKB, s.ci95.bandwidthKB)
     let convStr = 'n/a'
-    if (sid === 'navbandit') {
+    if (sid === 'navbandit' || sid === 'navbandit-ts') {
       const conv = s.mean.convergenceNav
       convStr = conv > 0 ? `~${Math.round(conv)} navs` : 'not reached'
     } else if (sid === 'static-top-k') {
       convStr = 'oracle'
     }
 
-    let line = `${pad(names[sid], 16)}${pad(hitRateStr, 20)}${pad(effStr, 20)}${pad(bwStr, 18)}`
+    let line = `${pad(names[sid], 18)}${pad(hitRateStr, 20)}${pad(effStr, 20)}${pad(bwStr, 18)}`
 
     if (hasLatency) {
       const latStr = ms(s.mean.expectedLatencyMs, s.ci95.expectedLatencyMs)

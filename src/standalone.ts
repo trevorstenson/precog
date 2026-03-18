@@ -1,10 +1,10 @@
-import { createArm, selectTopK, type Arm } from './ucb1'
+// ← Change this import to './ucb1' to switch algorithms
+import { strategy } from './thompson'
 import { checkBandwidth } from './bandwidth'
 import { prefetch, discoverLinks } from './prefetch'
 
 const STORAGE_KEY = 'navbandit'
 const SESSION_KEY = 'navbandit:last'
-const DEFAULT_ALPHA = 0.5
 const DEFAULT_TOP_K = 3
 const PRUNE_AFTER = 50
 const STORAGE_TTL_MS = 30 * 24 * 60 * 60 * 1000
@@ -17,7 +17,7 @@ interface StoredEnvelope<T> {
 }
 
 interface PageState {
-  arms: Record<string, Arm>
+  arms: Record<string, any>
   totalPulls: number
 }
 
@@ -31,20 +31,43 @@ interface SessionData {
   predictions: string[]
 }
 
+/** Detect and migrate v1 UCB1 arm shape { pulls, rewards, lastSeen } → BetaArm */
+function migrateArm(arm: any, lastSeen: number): any {
+  if (typeof arm.alpha === 'number' && typeof arm.beta === 'number') {
+    return arm
+  }
+  // UCB1 shape: convert rewards/pulls → alpha/beta
+  const rewards = typeof arm.rewards === 'number' ? arm.rewards : 0
+  const pulls = typeof arm.pulls === 'number' ? arm.pulls : 0
+  const failures = pulls - rewards
+  return {
+    alpha: 1 + Math.max(0, rewards),
+    beta: 1 + Math.max(0, failures),
+    lastSeen: typeof arm.lastSeen === 'number' ? arm.lastSeen : lastSeen,
+  }
+}
+
+function isValidArm(arm: unknown): boolean {
+  if (typeof arm !== 'object' || arm === null) return false
+  const value = arm as any
+  // Accept both v2 (BetaArm) and v1 (UCB1 Arm) shapes for migration
+  const isBeta =
+    typeof value.alpha === 'number' &&
+    typeof value.beta === 'number' &&
+    typeof value.lastSeen === 'number'
+  const isUcb1 =
+    typeof value.pulls === 'number' &&
+    typeof value.rewards === 'number' &&
+    typeof value.lastSeen === 'number'
+  return isBeta || isUcb1
+}
+
 function isValidPageState(v: unknown): v is PageState {
   if (typeof v !== 'object' || v === null) return false
   const page = v as any
   if (typeof page.totalPulls !== 'number') return false
   if (typeof page.arms !== 'object' || page.arms === null) return false
-  return Object.values(page.arms).every((arm) => {
-    if (typeof arm !== 'object' || arm === null) return false
-    const value = arm as any
-    return (
-      typeof value.pulls === 'number' &&
-      typeof value.rewards === 'number' &&
-      typeof value.lastSeen === 'number'
-    )
-  })
+  return Object.values(page.arms).every(isValidArm)
 }
 
 function isValidState(v: unknown): v is StandaloneState {
@@ -112,18 +135,27 @@ function savePersisted<T>(storage: Storage, key: string, data: T): void {
   storage.setItem(
     key,
     JSON.stringify({
-      version: 1,
+      version: 2,
       savedAt: Date.now(),
       data,
     } satisfies StoredEnvelope<T>)
   )
 }
 
-function loadState(): StandaloneState {
-  return loadPersisted(localStorage, STORAGE_KEY, STORAGE_TTL_MS, isValidState) ?? {
-    pages: {},
-    totalNavigations: 0,
+function migrateState(state: StandaloneState): StandaloneState {
+  for (const path in state.pages) {
+    const page = state.pages[path]
+    for (const url in page.arms) {
+      page.arms[url] = migrateArm(page.arms[url], state.totalNavigations)
+    }
   }
+  return state
+}
+
+function loadState(): StandaloneState {
+  const raw = loadPersisted(localStorage, STORAGE_KEY, STORAGE_TTL_MS, isValidState)
+  if (!raw) return { pages: {}, totalNavigations: 0 }
+  return migrateState(raw)
 }
 
 function saveState(state: StandaloneState): void {
@@ -184,8 +216,7 @@ function init(): void {
       // Always reward the actual destination — even if it wasn't predicted
       const destArm = fromPage.arms[fullUrl]
       if (destArm) {
-        destArm.rewards++
-        destArm.pulls++
+        strategy.reward(destArm)
         fromPage.totalPulls++
       }
 
@@ -194,7 +225,7 @@ function init(): void {
         if (predUrl !== fullUrl) {
           const arm = fromPage.arms[predUrl]
           if (arm) {
-            arm.pulls++
+            strategy.penalize(arm)
             fromPage.totalPulls++
           }
         }
@@ -213,10 +244,7 @@ function init(): void {
     const linkCount = urls.length
     for (const url of urls) {
       if (!page.arms[url]) {
-        const arm = createArm(state.totalNavigations)
-        arm.pulls = 1
-        arm.rewards = 1 / linkCount
-        page.arms[url] = arm
+        page.arms[url] = strategy.createArm(state.totalNavigations, linkCount)
       }
       page.arms[url].lastSeen = state.totalNavigations
     }
@@ -231,7 +259,7 @@ function init(): void {
 
     let predictions: string[] = []
     if (k > 0 && Object.keys(page.arms).length > 0) {
-      predictions = selectTopK(page.arms, Math.max(1, page.totalPulls), k, DEFAULT_ALPHA)
+      predictions = strategy.selectTopK(page.arms, k, page.totalPulls)
       prefetch(predictions)
     }
 

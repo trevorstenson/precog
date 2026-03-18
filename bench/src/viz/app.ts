@@ -8,7 +8,7 @@ const status = document.getElementById('status') as HTMLSpanElement
 
 // Try to load results.json and sweep-results.json automatically
 async function tryAutoLoad() {
-  for (const file of ['sweep-results.json', 'results.json']) {
+  for (const file of ['results.json', 'sweep-results.json']) {
     try {
       const resp = await fetch(`/${file}`)
       if (resp.ok) {

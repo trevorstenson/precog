@@ -4,6 +4,7 @@ declare const Chart: any
 
 const COLORS: Record<StrategyId, string> = {
   'navbandit': '#58a6ff',
+  'navbandit-ts': '#a371f7',
   'prefetch-all': '#f85149',
   'static-top-k': '#d29922',
   'random-k': '#8b949e',
@@ -12,6 +13,7 @@ const COLORS: Record<StrategyId, string> = {
 
 const LABELS: Record<StrategyId, string> = {
   'navbandit': 'NavBandit (UCB1)',
+  'navbandit-ts': 'NavBandit (Thompson)',
   'prefetch-all': 'Prefetch All',
   'static-top-k': 'Static Top-K (Oracle)',
   'random-k': 'Random K',
@@ -20,6 +22,7 @@ const LABELS: Record<StrategyId, string> = {
 
 const STRATEGY_ORDER: StrategyId[] = [
   'navbandit',
+  'navbandit-ts',
   'prefetch-all',
   'static-top-k',
   'random-k',
@@ -28,6 +31,7 @@ const STRATEGY_ORDER: StrategyId[] = [
 
 export function renderCards(result: BenchmarkResult, container: HTMLDivElement): void {
   const nb = result.strategies['navbandit']
+  const ts = result.strategies['navbandit-ts']
   const pa = result.strategies['prefetch-all']
 
   const bandwidthSaved = pa.mean.bandwidthKB > 0
@@ -38,15 +42,16 @@ export function renderCards(result: BenchmarkResult, container: HTMLDivElement):
     ? (nb.mean.efficiency / pa.mean.efficiency).toFixed(1)
     : 'N/A'
 
-  const convergence = nb.mean.convergenceNav > 0
-    ? `~${Math.round(nb.mean.convergenceNav)}`
-    : 'N/R'
+  const nbConv = nb.mean.convergenceNav > 0 ? `~${Math.round(nb.mean.convergenceNav)}` : 'N/R'
+  const tsConv = ts.mean.convergenceNav > 0 ? `~${Math.round(ts.mean.convergenceNav)}` : 'N/R'
 
   const cards = [
-    { label: 'NavBandit Hit Rate', value: `${(nb.mean.hitRate * 100).toFixed(1)}%`, cls: 'blue' },
+    { label: 'UCB1 Hit Rate', value: `${(nb.mean.hitRate * 100).toFixed(1)}%`, cls: 'blue' },
+    { label: 'Thompson Hit Rate', value: `${(ts.mean.hitRate * 100).toFixed(1)}%`, cls: 'purple' },
     { label: 'Bandwidth Saved vs Prefetch All', value: `${bandwidthSaved}%`, cls: 'green' },
     { label: 'Efficiency Multiplier', value: `${efficiencyMultiple}×`, cls: 'green' },
-    { label: 'Convergence (navs)', value: convergence, cls: 'blue' },
+    { label: 'UCB1 Convergence', value: nbConv, cls: 'blue' },
+    { label: 'Thompson Convergence', value: tsConv, cls: 'purple' },
   ]
 
   for (const card of cards) {
@@ -257,7 +262,7 @@ export function renderTable(result: BenchmarkResult, container: HTMLElement): vo
     <tbody>
       ${STRATEGY_ORDER.map(sid => {
         const s = result.strategies[sid]
-        const convStr = sid === 'navbandit'
+        const convStr = (sid === 'navbandit' || sid === 'navbandit-ts')
           ? (s.mean.convergenceNav > 0 ? `~${Math.round(s.mean.convergenceNav)} navs` : 'not reached')
           : sid === 'static-top-k' ? 'oracle' : 'n/a'
         return `<tr>

@@ -27,3 +27,20 @@ export function selectTopK(
     .slice(0, k)
     .map((p) => p.url)
 }
+
+const DEFAULT_ALPHA = 0.5
+
+/** Strategy adapter — swap this import in standalone.ts to switch algorithms */
+export const strategy = {
+  createArm(lastSeen: number, linkCount: number): Arm {
+    const arm = createArm(lastSeen)
+    arm.pulls = 1
+    arm.rewards = 1 / linkCount
+    return arm
+  },
+  selectTopK(arms: Record<string, Arm>, k: number, totalPulls: number): string[] {
+    return selectTopK(arms, Math.max(1, totalPulls), k, DEFAULT_ALPHA)
+  },
+  reward(arm: Arm): void { arm.rewards++; arm.pulls++ },
+  penalize(arm: Arm): void { arm.pulls++ },
+}

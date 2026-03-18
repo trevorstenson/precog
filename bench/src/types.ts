@@ -29,7 +29,7 @@ export interface TrafficMatrix {
   probabilities: Record<string, Record<string, number>>
 }
 
-export type StrategyId = 'navbandit' | 'prefetch-all' | 'static-top-k' | 'random-k' | 'no-prefetch'
+export type StrategyId = 'navbandit' | 'navbandit-ts' | 'prefetch-all' | 'static-top-k' | 'random-k' | 'no-prefetch'
 
 export interface Strategy {
   id: StrategyId
