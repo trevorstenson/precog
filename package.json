@@ -1,6 +1,6 @@
 {
   "name": "navbandit",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Adaptive prefetching — learns which pages to prefetch using Bayesian Thompson Sampling + Speculation Rules API",
   "type": "module",
   "repository": {
